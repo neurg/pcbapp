@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>SVG Modifier (pcb2svg)</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    #output {
+      margin-top: 20px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      display: inline-block;
+    }
+    #downloadBtn {
+      margin-top: 20px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h2>Upload an SVG File</h2>
+  <input type="file" id="svgInput" accept=".svg" />
+
+  <div id="output"></div>
+  <a id="downloadBtn">Download Modified SVG</a>
+
+  <script>
+    document.getElementById("svgInput").addEventListener("change", async function () {
+      const file = this.files[0];
+      const text = await file.text();
+
+      // Parse the SVG XML
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, "image/svg+xml");
+      const svg = doc.documentElement;
+
+      // 🧮 Extract original width/height in mm
+      const widthRaw = svg.getAttribute("width") || "210mm";
+      const heightRaw = svg.getAttribute("height") || "297mm";
+      const origWidth = parseFloat(widthRaw.replace("mm", "").trim());
+      const origHeight = parseFloat(heightRaw.replace("mm", "").trim());
+
+      // 📏 Resize canvas to A4
+      svg.setAttribute("width", "210mm");
+      svg.setAttribute("height", "297mm");
+
+      // 🔍 Adjust viewBox
+      const vb = svg.getAttribute("viewBox");
+      if (vb) {
+        let [minX, minY, width, height] = vb.split(" ").map(Number);
+        width = width * 210 / origWidth;
+        height = height * 297 / origHeight;
+        svg.setAttribute("viewBox", `${minX} ${minY} ${width} ${height}`);
+      }
+
+      // 🎯 Set first <rect> fill to white
+      const firstRect = doc.querySelector("rect");
+      if (firstRect) firstRect.setAttribute("fill", "#ffffff");
+
+      // 🎯 Modify <path> with id="topBoardSolderReal"
+      const topPath = doc.querySelector('path[id="topBoardSolderReal"]');
+      if (topPath) {
+        topPath.setAttribute("fill", "#ffffff");
+        topPath.setAttribute("stroke", "#000000");
+      }
+
+      // 🖤 Make all other <g> elements black if not already white/black
+      doc.querySelectorAll("g").forEach(g => {
+        const fill = (g.getAttribute("fill") || "").toLowerCase();
+        if (fill && !["#000000", "black", "#ffffff", "white"].includes(fill)) {
+          g.setAttribute("fill", "#000000");
+          g.setAttribute("stroke", "#000000");
+        }
+      });
+
+      // 🔄 Clone and display modified SVG
+      const clone = svg.cloneNode(true);
+      document.getElementById("output").innerHTML = "";
+      document.getElementById("output").appendChild(clone);
+
+      // 💾 Prepare download link
+      const serializer = new XMLSerializer();
+      const updatedSVG = serializer.serializeToString(svg);
+      const blob = new Blob([updatedSVG], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+
+      const downloadLink = document.getElementById("downloadBtn");
+      downloadLink.href = url;
+      downloadLink.download = "modified.svg";
+
+      // Safari fallback: open in new tab
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      downloadLink.onclick = () => {
+        if (isSafari) {
+          window.open(url, "_blank");
+          return false;
+        }
+      };
+
+      downloadLink.style.display = "inline-block";
+    });
+  </script>
+</body>
+</html>
